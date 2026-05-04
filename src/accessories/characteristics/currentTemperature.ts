@@ -1,4 +1,4 @@
-import { Characteristic, CharacteristicGetCallback } from "homebridge";
+import { Characteristic, CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
 import { ClimateAccessory } from "../ClimateAccessory";
@@ -13,43 +13,41 @@ export class CurrentTemperatureCharacteristic extends TuyaWebCharacteristic {
 
   public setProps(char?: Characteristic): Characteristic | undefined {
     //Roughly the coldest and hottest temperatures ever recorded on earth.
-    return char?.setProps({
-      minValue: -100,
-      maxValue: 150,
-    });
+    return char?.setProps({ minValue: -100, maxValue: 150 });
   }
 
   public static isSupportedByAccessory(accessory: BaseAccessory): boolean {
     return accessory.deviceConfig.data.current_temperature !== undefined;
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.accessory
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    const data = await this.accessory
       .getDeviceState()
-      .then((data) => {
-        this.debug("[GET] %s", data?.current_temperature);
-        this.updateValue(data, callback);
-      })
-      .catch(this.accessory.handleError("GET", callback));
+      .catch(this.accessory.handleError("GET"));
+    this.debug("[GET] %s", data?.current_temperature);
+    const temperature = this.computeTemperature(data);
+    if (temperature !== undefined) {
+      this.accessory.setCharacteristic(this.homekitCharacteristic, temperature, true);
+      return temperature;
+    }
+    throw new Error("Could not get temperature from data");
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
-    let currentTemperature = data?.current_temperature
-      ? Number(data?.current_temperature) *
-        (this.accessory as ClimateAccessory).currentTemperatureFactor
-      : undefined;
-    if (currentTemperature) {
-      currentTemperature = Math.round(currentTemperature * 10) / 10;
-
-      this.debug("[UPDATE] %s", currentTemperature);
-      this.accessory.setCharacteristic(
-        this.homekitCharacteristic,
-        currentTemperature,
-        !callback,
-      );
-      callback && callback(null, currentTemperature);
+  updateValue(data: DeviceState): void {
+    const temperature = this.computeTemperature(data);
+    if (temperature !== undefined) {
+      this.debug("[UPDATE] %s", temperature);
+      this.accessory.setCharacteristic(this.homekitCharacteristic, temperature, true);
     } else {
-      callback && callback(new Error("Could not get temperature from data"));
+      this.error("Could not get temperature from data");
     }
+  }
+
+  private computeTemperature(data: DeviceState): number | undefined {
+    if (!data?.current_temperature) return undefined;
+    const raw =
+      Number(data.current_temperature) *
+      (this.accessory as ClimateAccessory).currentTemperatureFactor;
+    return Math.round(raw * 10) / 10;
   }
 }

@@ -1,8 +1,4 @@
-import {
-  CharacteristicGetCallback,
-  CharacteristicSetCallback,
-  CharacteristicValue,
-} from "homebridge";
+import { CharacteristicValue } from "homebridge";
 import { COLOR_MODES } from "./index";
 import { TuyaWebCharacteristic } from "./base";
 import { ColorAccessory } from "../ColorAccessory";
@@ -23,47 +19,37 @@ export class SaturationCharacteristic extends TuyaWebCharacteristic<ColorAccesso
     return configData.color_mode !== undefined;
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.accessory
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    const data = await this.accessory
       .getDeviceState()
-      .then((data) => {
-        this.debug("[GET] %s", data?.color?.saturation);
-        this.updateValue(data, callback);
-      })
-      .catch(this.accessory.handleError("GET", callback));
+      .catch(this.accessory.handleError("GET"));
+    this.debug("[GET] %s", data?.color?.saturation);
+    const stateValue = this.extractValue(data);
+    this.accessory.setCharacteristic(this.homekitCharacteristic, stateValue, true);
+    return stateValue;
   }
 
-  public setRemoteValue(
-    homekitValue: CharacteristicValue,
-    callback: CharacteristicSetCallback,
-  ): void {
-    // Set device state in Tuya Web API
+  public async setRemoteValue(homekitValue: CharacteristicValue): Promise<void> {
     const value = homekitValue as number;
-
-    this.accessory
+    await this.accessory
       .setColor({ saturation: value })
-      .then(() => {
-        this.debug("[SET] %s", value);
-        callback();
-      })
-      .catch(this.accessory.handleError("SET", callback));
+      .catch(this.accessory.handleError("SET"));
+    this.debug("[SET] %s", value);
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
-    let stateValue: number = SaturationCharacteristic.DEFAULT_VALUE;
+  updateValue(data: DeviceState): void {
+    const stateValue = this.extractValue(data);
+    this.accessory.setCharacteristic(this.homekitCharacteristic, stateValue, true);
+  }
+
+  private extractValue(data: DeviceState): number {
     if (
       data?.color_mode !== undefined &&
       data?.color_mode in COLOR_MODES &&
       data?.color?.saturation
     ) {
-      stateValue = Number(data.color.saturation);
+      return Number(data.color.saturation);
     }
-
-    this.accessory.setCharacteristic(
-      this.homekitCharacteristic,
-      stateValue,
-      !callback,
-    );
-    callback && callback(null, stateValue);
+    return SaturationCharacteristic.DEFAULT_VALUE;
   }
 }

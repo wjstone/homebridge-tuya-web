@@ -1,4 +1,4 @@
-import { CharacteristicGetCallback } from "homebridge";
+import { CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
 import { CoverState, DeviceState, ExtendedBoolean } from "../../api/response";
@@ -15,24 +15,28 @@ export class CurrentPositionCharacteristic extends TuyaWebCharacteristic {
     return true;
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.accessory
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    const data = await this.accessory
       .getDeviceState()
-      .then((data) => {
-        this.debug("[GET] %s", data?.state);
-        this.updateValue(data, callback);
-      })
-      .catch(this.accessory.handleError("GET", callback));
+      .catch(this.accessory.handleError("GET"));
+    this.debug("[GET] %s", data?.state);
+    return this.extractValue(data);
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
-    this.debug(`Updating value`, data);
+  updateValue(data: DeviceState): void {
+    this.debug("Updating value", data);
+    try {
+      const value = this.extractValue(data);
+      this.accessory.setCharacteristic(this.homekitCharacteristic, value, true);
+    } catch (error) {
+      this.error("%s", (error as Error).message);
+    }
+  }
+
+  private extractValue(data: DeviceState): CharacteristicValue {
     if (!isNaN(Number(String(data?.state)))) {
-      //State is a number and probably 1, 2 or 3
       const state = Number(data.state);
-
       let stateValue!: number;
-
       switch (state) {
         case CoverState.Opening:
           stateValue = 50;
@@ -50,24 +54,13 @@ export class CurrentPositionCharacteristic extends TuyaWebCharacteristic {
             stateValue = 0;
           }
       }
-
-      this.accessory.setCharacteristic(
-        this.homekitCharacteristic,
-        stateValue,
-        !callback,
-      );
-      callback && callback(null, stateValue);
+      this.accessory.setCharacteristic(this.homekitCharacteristic, stateValue, true);
+      return stateValue;
     } else if (["true", "false"].includes(String(data?.state).toLowerCase())) {
       const stateValue = TuyaBoolean(data.state as ExtendedBoolean) ? 100 : 0;
-      this.accessory.setCharacteristic(
-        this.homekitCharacteristic,
-        stateValue,
-        !callback,
-      );
-      callback && callback(null, stateValue);
-    } else {
-      callback &&
-        callback(new Error(`Unexpected state value provided: ${data?.state}`));
+      this.accessory.setCharacteristic(this.homekitCharacteristic, stateValue, true);
+      return stateValue;
     }
+    throw new Error(`Unexpected state value provided: ${data?.state}`);
   }
 }

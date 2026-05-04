@@ -1,4 +1,4 @@
-import { Characteristic, CharacteristicGetCallback } from "homebridge";
+import { Characteristic, CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
 import { DeviceState, ExtendedBoolean } from "../../api/response";
@@ -24,41 +24,34 @@ export class CurrentHeatingCoolingStateCharacteristic extends TuyaWebCharacteris
     if (data.mode) {
       validValues.push(this.CurrentHeatingCoolingState.COOL);
     }
-    return char?.setProps({
-      validValues,
-    });
-  }
-
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.accessory
-      .getDeviceState()
-      .then((data) => {
-        const d = {
-          state: data.state,
-          mode: data.mode,
-        };
-        this.debug("[GET] %s", d);
-        this.updateValue(d, callback);
-      })
-      .catch(this.accessory.handleError("GET", callback));
+    return char?.setProps({ validValues });
   }
 
   private get CurrentHeatingCoolingState() {
     return this.accessory.platform.Characteristic.CurrentHeatingCoolingState;
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
-    if (!TuyaBoolean(data?.state as ExtendedBoolean)) {
-      this.accessory.setCharacteristic(
-        this.homekitCharacteristic,
-        this.CurrentHeatingCoolingState.OFF,
-        !callback,
-      );
-      this.debug("[UPDATE] %S", "OFF");
-      callback && callback(null, this.CurrentHeatingCoolingState.OFF);
-      return;
-    }
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    const data = await this.accessory
+      .getDeviceState()
+      .catch(this.accessory.handleError("GET"));
+    const d = { state: data.state, mode: data.mode };
+    this.debug("[GET] %s", d);
+    const value = this.computeValue(d);
+    this.accessory.setCharacteristic(this.homekitCharacteristic, value, true);
+    return value;
+  }
 
+  updateValue(data: DeviceState): void {
+    const value = this.computeValue(data);
+    this.accessory.setCharacteristic(this.homekitCharacteristic, value, true);
+  }
+
+  private computeValue(data: DeviceState): number {
+    if (!TuyaBoolean(data?.state as ExtendedBoolean)) {
+      this.debug("[UPDATE] %S", "OFF");
+      return this.CurrentHeatingCoolingState.OFF;
+    }
     const mode = {
       auto: this.CurrentHeatingCoolingState.COOL,
       wind: this.CurrentHeatingCoolingState.COOL,
@@ -69,11 +62,6 @@ export class CurrentHeatingCoolingStateCharacteristic extends TuyaWebCharacteris
       "[UPDATE] %s",
       mode === this.CurrentHeatingCoolingState.HEAT ? "HEAT" : "COOL",
     );
-    this.accessory.setCharacteristic(
-      this.homekitCharacteristic,
-      mode,
-      !callback,
-    );
-    callback && callback(null, mode);
+    return mode;
   }
 }

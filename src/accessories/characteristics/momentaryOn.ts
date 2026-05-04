@@ -1,8 +1,4 @@
-import {
-  CharacteristicGetCallback,
-  CharacteristicSetCallback,
-  CharacteristicValue,
-} from "homebridge";
+import { CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
 import { DeviceState } from "../../api/response";
@@ -18,41 +14,27 @@ export class MomentaryOnCharacteristic extends TuyaWebCharacteristic {
     return true;
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    const value = 0;
-    this.debug("[GET] %s", value);
-    this.updateValue({}, callback);
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    this.debug("[GET] %s", 0);
+    return 0;
   }
 
-  public setRemoteValue(
-    homekitValue: CharacteristicValue,
-    callback: CharacteristicSetCallback,
-  ): void {
-    // Set device state in Tuya Web API
+  public async setRemoteValue(homekitValue: CharacteristicValue): Promise<void> {
     const value = homekitValue ? 1 : 0;
-
     if (value === 0) {
-      callback();
       return;
     }
-
-    this.accessory
+    await this.accessory
       .setDeviceState("turnOnOff", { value }, {})
-      .then(() => {
-        this.debug("[SET] %s %s", homekitValue, value);
-        callback();
-        const reset = () => {
-          this.accessory.service?.setCharacteristic(
-            this.homekitCharacteristic,
-            0,
-          );
-        };
-        setTimeout(reset.bind(this), 100);
-      })
-      .catch(this.accessory.handleError("SET", callback));
+      .catch(this.accessory.handleError("SET"));
+    this.debug("[SET] %s %s", homekitValue, value);
+    // Reset back to off after a short delay
+    setTimeout(() => {
+      this.accessory.service?.setCharacteristic(this.homekitCharacteristic, 0);
+    }, 100);
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
-    callback && callback(null, 0);
+  updateValue(_data: DeviceState): void {
+    this.accessory.setCharacteristic(this.homekitCharacteristic, 0, true);
   }
 }

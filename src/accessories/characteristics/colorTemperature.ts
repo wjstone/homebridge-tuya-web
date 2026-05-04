@@ -1,10 +1,4 @@
-import {
-  Characteristic,
-  CharacteristicGetCallback,
-  CharacteristicSetCallback,
-  CharacteristicValue,
-  Formats,
-} from "homebridge";
+import { Characteristic, CharacteristicValue, Formats } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { MapRange } from "../../helpers/MapRange";
 import { BaseAccessory } from "../BaseAccessory";
@@ -55,75 +49,63 @@ export class ColorTemperatureCharacteristic extends TuyaWebCharacteristic {
     this.maxHomekit,
   );
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.accessory
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    const data = await this.accessory
       .getDeviceState()
-      .then((data) => {
-        this.debug("[GET] %s", data?.color_temp);
-        this.updateValue(data, callback);
-      })
-      .catch(this.accessory.handleError("GET", callback));
-  }
-
-  public setRemoteValue(
-    homekitValue: CharacteristicValue,
-    callback: CharacteristicSetCallback,
-  ): void {
-    if (typeof homekitValue !== "number") {
-      const errorMsg = `Received unexpected temperature value ${JSON.stringify(
-        homekitValue,
-      )} of type ${typeof homekitValue}`;
-      this.warn(errorMsg);
-      callback(new Error(errorMsg));
-      return;
-    }
-
-    // Set device state in Tuya Web API
-    const value = Math.round(this.rangeMapper.homekitToTuya(homekitValue));
-
-    this.accessory
-      .setDeviceState("colorTemperatureSet", { value }, { color_temp: value })
-      .then(() => {
-        this.debug("[SET] %s %s", homekitValue, value);
-        callback();
-      })
-      .catch(this.accessory.handleError("SET", callback));
-  }
-
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
+      .catch(this.accessory.handleError("GET"));
+    this.debug("[GET] %s", data?.color_temp);
     if (data?.color_temp !== undefined) {
-      const tuyaValue = data.color_temp;
-      const homekitColorTemp = Math.round(
-        this.rangeMapper.tuyaToHomekit(Number(data.color_temp)),
-      );
-
-      if (homekitColorTemp > this.maxHomekit) {
-        this.warn(
-          "Characteristic 'ColorTemperature' will receive value higher than allowed mired (%s) since provided Tuya kelvin value (%s) " +
-            "is lower then configured minimum Tuya kelvin value (%s). Please update your configuration!",
-          homekitColorTemp,
-          tuyaValue,
-          this.rangeMapper.tuyaStart,
-        );
-      } else if (homekitColorTemp < this.minHomekit) {
-        this.warn(
-          "Characteristic 'ColorTemperature' will receive value lower than allowed mired (%s) since provided Tuya kelvin value (%s) " +
-            "exceeds configured maximum Tuya kelvin value (%s). Please update your configuration!",
-          homekitColorTemp,
-          tuyaValue,
-          this.rangeMapper.tuyaEnd,
-        );
-      }
-
-      this.accessory.setCharacteristic(
-        this.homekitCharacteristic,
-        homekitColorTemp,
-        !callback,
-      );
-      callback && callback(null, homekitColorTemp);
-    } else {
-      callback &&
-        callback(new Error("Could not find required property 'color_temp'"));
+      const homekitColorTemp = this.toHomekitColorTemp(data);
+      this.accessory.setCharacteristic(this.homekitCharacteristic, homekitColorTemp, true);
+      return homekitColorTemp;
     }
+    throw new Error("Could not find required property 'color_temp'");
+  }
+
+  public async setRemoteValue(homekitValue: CharacteristicValue): Promise<void> {
+    if (typeof homekitValue !== "number") {
+      throw new Error(
+        `Received unexpected temperature value ${JSON.stringify(homekitValue)} of type ${typeof homekitValue}`,
+      );
+    }
+    const value = Math.round(this.rangeMapper.homekitToTuya(homekitValue));
+    await this.accessory
+      .setDeviceState("colorTemperatureSet", { value }, { color_temp: value })
+      .catch(this.accessory.handleError("SET"));
+    this.debug("[SET] %s %s", homekitValue, value);
+  }
+
+  updateValue(data: DeviceState): void {
+    if (data?.color_temp !== undefined) {
+      const homekitColorTemp = this.toHomekitColorTemp(data);
+      this.accessory.setCharacteristic(this.homekitCharacteristic, homekitColorTemp, true);
+    } else {
+      this.error("Could not find required property 'color_temp'");
+    }
+  }
+
+  private toHomekitColorTemp(data: DeviceState): number {
+    const tuyaValue = data.color_temp;
+    const homekitColorTemp = Math.round(
+      this.rangeMapper.tuyaToHomekit(Number(data.color_temp)),
+    );
+    if (homekitColorTemp > this.maxHomekit) {
+      this.warn(
+        "Characteristic 'ColorTemperature' will receive value higher than allowed mired (%s) since provided Tuya kelvin value (%s) " +
+          "is lower than configured minimum Tuya kelvin value (%s). Please update your configuration!",
+        homekitColorTemp,
+        tuyaValue,
+        this.rangeMapper.tuyaStart,
+      );
+    } else if (homekitColorTemp < this.minHomekit) {
+      this.warn(
+        "Characteristic 'ColorTemperature' will receive value lower than allowed mired (%s) since provided Tuya kelvin value (%s) " +
+          "exceeds configured maximum Tuya kelvin value (%s). Please update your configuration!",
+        homekitColorTemp,
+        tuyaValue,
+        this.rangeMapper.tuyaEnd,
+      );
+    }
+    return homekitColorTemp;
   }
 }

@@ -1,4 +1,4 @@
-import { CharacteristicSetCallback, CharacteristicValue } from "homebridge";
+import { CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
 import { CoverState } from "../../api/response";
@@ -15,20 +15,14 @@ export class HoldPositionCharacteristic extends TuyaWebCharacteristic {
     return TuyaBoolean(accessory.deviceConfig.data.support_stop);
   }
 
-  public setRemoteValue(
-    homekitValue: CharacteristicValue,
-    callback: CharacteristicSetCallback,
-  ): void {
-    this.accessory
+  public async setRemoteValue(_homekitValue: CharacteristicValue): Promise<void> {
+    await this.accessory
       .setDeviceState(
         "startStop",
         { value: 0 },
         { state: CoverState.Stopped, target_cover_state: CoverState.Stopped },
       )
-      .then(() => {
-        this.debug("[SET]");
-        callback();
-      })
-      .catch(this.accessory.handleError("SET", callback));
+      .catch(this.accessory.handleError("SET"));
+    this.debug("[SET]");
   }
 }

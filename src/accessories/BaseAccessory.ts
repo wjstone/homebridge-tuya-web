@@ -2,7 +2,6 @@ import { HomebridgeAccessory, TuyaWebPlatform } from "../platform";
 import {
   Categories,
   Characteristic,
-  CharacteristicGetCallback,
   CharacteristicValue,
   Logger,
   LogLevel,
@@ -14,7 +13,7 @@ import debounce from "lodash.debounce";
 import { PLUGIN_NAME } from "../settings";
 import { inspect } from "util";
 import { DebouncedPromise } from "../helpers/DebouncedPromise";
-import { ErrorCallback, RateLimitError } from "../errors";
+import { RateLimitError } from "../errors";
 import { GeneralCharacteristic } from "./characteristics";
 import {
   DeviceState,
@@ -29,10 +28,7 @@ import { TuyaBoolean } from "../helpers/TuyaBoolean";
 
 export type CharacteristicConstructor = WithUUID<new () => Characteristic>;
 
-type UpdateCallback = (
-  data?: DeviceState,
-  callback?: CharacteristicGetCallback,
-) => void;
+type UpdateCallback = (data?: DeviceState) => void;
 
 export abstract class BaseAccessory {
   public readonly log: Logger;
@@ -160,10 +156,8 @@ export abstract class BaseAccessory {
     this.service = homebridgeAccessory.getService(this.serviceType);
     if (!this.service) {
       this.log.debug("Creating New Service %s", this.deviceConfig.id);
-      this.service = homebridgeAccessory.addService(
-        this.serviceType,
-        this.deviceConfig.name,
-      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.service = homebridgeAccessory.addService(this.serviceType as any);
     }
 
     homebridgeAccessory.on("identify", this.onIdentify.bind(this));
@@ -434,17 +428,14 @@ export abstract class BaseAccessory {
     this.updateCallbackList.set(char, callback);
   }
 
-  public handleError(
-    type: "SET" | "GET",
-    callback: ErrorCallback,
-  ): ErrorCallback {
-    return (error) => {
+  public handleError(type: "SET" | "GET"): (error: unknown) => never {
+    return (error: unknown): never => {
       if (error instanceof DeviceOfflineError) {
         this.error("%s", error.message);
-      } else {
+      } else if (error instanceof Error) {
         this.error("[%s] %s", type, error.message);
       }
-      callback(error);
+      throw error;
     };
   }
 

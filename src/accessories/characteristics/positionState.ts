@@ -1,4 +1,4 @@
-import { CharacteristicGetCallback } from "homebridge";
+import { CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
 import { DeviceState } from "../../api/response";
@@ -18,17 +18,17 @@ export class PositionStateCharacteristic extends TuyaWebCharacteristic {
     return this.accessory.platform.Characteristic.PositionState;
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.updateValue({}, callback);
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    this.debug("Setting position state to stopped");
+    return this.PositionState.STOPPED;
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
+  updateValue(_data: DeviceState): void {
     this.debug("Setting position state to stopped");
     this.accessory.setCharacteristic(
       this.homekitCharacteristic,
       this.PositionState.STOPPED,
-      !callback,
+      true,
     );
-    callback && callback(null, this.PositionState.STOPPED);
   }
 }

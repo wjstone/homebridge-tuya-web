@@ -1,11 +1,6 @@
 import { BaseAccessory, CharacteristicConstructor } from "../BaseAccessory";
 import { LogLevel } from "homebridge";
-import {
-  Characteristic,
-  CharacteristicGetCallback,
-  CharacteristicSetCallback,
-  CharacteristicValue,
-} from "homebridge";
+import { Characteristic, CharacteristicValue } from "homebridge";
 
 export abstract class TuyaWebCharacteristic<
   Accessory extends BaseAccessory = BaseAccessory,
@@ -62,34 +57,24 @@ export abstract class TuyaWebCharacteristic<
   }
 
   /**
-   * Getter tuya HomeKit;
-   * Should provide HomeKit compatible data homeKit callback
-   * @param callback
+   * Getter called by HomeKit when it requests the current value.
+   * Must return a Promise resolving to the HomeKit-compatible value,
+   * or reject/throw to signal an error.
    */
-  public getRemoteValue?(callback: CharacteristicGetCallback): void;
+  public getRemoteValue?(): Promise<CharacteristicValue>;
 
   /**
-   * Setter homeKit HomeKit
-   * Called when value is changed in HomeKit.
-   * Must update remote value
-   * Must call callback after completion
-   * @param homekitValue
-   * @param callback
+   * Setter called by HomeKit when a value changes.
+   * Must return a Promise resolving when the remote update is complete,
+   * or reject/throw to signal an error.
    */
-  public setRemoteValue?(
-    homekitValue: CharacteristicValue,
-    callback: CharacteristicSetCallback,
-  ): void;
+  public setRemoteValue?(homekitValue: CharacteristicValue): Promise<void>;
 
   /**
-   * Updates the cached value for the device.
-   * @param data
-   * @param callback
+   * Push-update handler called during cloud polling.
+   * Should update the cached HomeKit value via setCharacteristic.
    */
-  public updateValue?(
-    data?: Accessory["deviceConfig"]["data"],
-    callback?: CharacteristicGetCallback,
-  ): void;
+  public updateValue?(data?: Accessory["deviceConfig"]["data"]): void;
 
   private enable(): void {
     const char = this.setProps(
@@ -99,11 +84,11 @@ export abstract class TuyaWebCharacteristic<
     if (char) {
       this.debug(JSON.stringify(char.props));
       if (this.getRemoteValue) {
-        char.on("get", this.getRemoteValue.bind(this));
+        char.onGet(this.getRemoteValue.bind(this));
       }
 
       if (this.setRemoteValue) {
-        char.on("set", this.setRemoteValue.bind(this));
+        char.onSet(this.setRemoteValue.bind(this));
       }
     }
 

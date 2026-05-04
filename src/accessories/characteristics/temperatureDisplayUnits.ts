@@ -1,6 +1,6 @@
+import { CharacteristicValue } from "homebridge";
 import { TuyaWebCharacteristic } from "./base";
 import { BaseAccessory } from "../BaseAccessory";
-import { CharacteristicGetCallback } from "homebridge";
 import { DeviceState } from "../../api/response";
 
 export class TemperatureDisplayUnitsCharacteristic extends TuyaWebCharacteristic {
@@ -14,18 +14,19 @@ export class TemperatureDisplayUnitsCharacteristic extends TuyaWebCharacteristic
     return true;
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.updateValue(undefined, callback);
-  }
-
   private get TemperatureDisplayUnits() {
     return this.accessory.platform.Characteristic.TemperatureDisplayUnits;
   }
 
-  updateValue(
-    data: DeviceState | undefined,
-    callback?: CharacteristicGetCallback,
-  ): void {
-    callback && callback(null, this.TemperatureDisplayUnits.CELSIUS);
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    return this.TemperatureDisplayUnits.CELSIUS;
+  }
+
+  updateValue(_data: DeviceState | undefined): void {
+    this.accessory.setCharacteristic(
+      this.homekitCharacteristic,
+      this.TemperatureDisplayUnits.CELSIUS,
+      true,
+    );
   }
 }

@@ -1,8 +1,4 @@
-import {
-  CharacteristicGetCallback,
-  CharacteristicSetCallback,
-  CharacteristicValue,
-} from "homebridge";
+import { CharacteristicValue } from "homebridge";
 import { COLOR_MODES } from "./index";
 import { inspect } from "util";
 import { TuyaWebCharacteristic } from "./base";
@@ -53,23 +49,28 @@ export class BrightnessCharacteristic extends TuyaWebCharacteristic {
     return MapRange.tuya(minTuya, maxTuya).homeKit(0, 100);
   }
 
-  public getRemoteValue(callback: CharacteristicGetCallback): void {
-    this.accessory
+  public async getRemoteValue(): Promise<CharacteristicValue> {
+    const data = await this.accessory
       .getDeviceState()
-      .then((data) => {
-        this.debug("[GET] %s", data?.brightness ?? data?.color?.brightness);
-        this.updateValue(data, callback);
-      })
-      .catch(this.accessory.handleError("GET", callback));
+      .catch(this.accessory.handleError("GET"));
+    this.debug("[GET] %s", data?.brightness ?? data?.color?.brightness);
+    const tuyaValue = Number(
+      this.usesColorBrightness ? data.color?.brightness : data.brightness,
+    );
+    const homekitValue = this.rangeMapper.tuyaToHomekit(tuyaValue);
+    this.warnIfOutOfRange(homekitValue, tuyaValue);
+    if (homekitValue) {
+      this.accessory.setCharacteristic(this.homekitCharacteristic, homekitValue, true);
+      return homekitValue;
+    }
+    throw new Error(
+      `Tried to get brightness but failed to parse data. \n ${inspect(data)}`,
+    );
   }
 
-  public setRemoteValue(
-    homekitValue: CharacteristicValue,
-    callback: CharacteristicSetCallback,
-  ): void {
+  public async setRemoteValue(homekitValue: CharacteristicValue): Promise<void> {
     const value = this.rangeMapper.homekitToTuya(Number(homekitValue));
-
-    this.accessory
+    await this.accessory
       .setDeviceState(
         "brightnessSet",
         { value },
@@ -77,19 +78,26 @@ export class BrightnessCharacteristic extends TuyaWebCharacteristic {
           ? { color: { brightness: String(value) } }
           : { brightness: value },
       )
-      .then(() => {
-        this.debug("[SET] %s", value);
-        callback();
-      })
-      .catch(this.accessory.handleError("SET", callback));
+      .catch(this.accessory.handleError("SET"));
+    this.debug("[SET] %s", value);
   }
 
-  updateValue(data: DeviceState, callback?: CharacteristicGetCallback): void {
+  updateValue(data: DeviceState): void {
     const tuyaValue = Number(
       this.usesColorBrightness ? data.color?.brightness : data.brightness,
     );
     const homekitValue = this.rangeMapper.tuyaToHomekit(tuyaValue);
+    this.warnIfOutOfRange(homekitValue, tuyaValue);
+    if (homekitValue) {
+      this.accessory.setCharacteristic(this.homekitCharacteristic, homekitValue, true);
+    } else {
+      this.error(
+        `Tried to set brightness but failed to parse data. \n ${inspect(data)}`,
+      );
+    }
+  }
 
+  private warnIfOutOfRange(homekitValue: number, tuyaValue: number): void {
     if (homekitValue > 100) {
       this.warn(
         "Characteristic 'Brightness' will receive value higher than allowed (%s) since provided Tuya value (%s) " +
@@ -107,23 +115,5 @@ export class BrightnessCharacteristic extends TuyaWebCharacteristic {
         this.rangeMapper.tuyaStart,
       );
     }
-
-    if (homekitValue) {
-      this.accessory.setCharacteristic(
-        this.homekitCharacteristic,
-        homekitValue,
-        !callback,
-      );
-      callback && callback(null, homekitValue);
-      return;
-    }
-
-    const error = new Error(
-      `Tried to set brightness but failed to parse data. \n ${inspect(data)}`,
-    );
-
-    this.error(error.message);
-
-    callback && callback(error);
   }
 }
